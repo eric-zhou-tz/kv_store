@@ -7,6 +7,12 @@
 #include <unordered_map>
 
 namespace kv {
+namespace persistence {
+class WriteAheadLog;
+}  // namespace persistence
+}  // namespace kv
+
+namespace kv {
 namespace store {
 
 /**
@@ -18,6 +24,13 @@ class KVStore {
    * @brief Constructs an empty key-value store.
    */
   KVStore() = default;
+
+  /**
+   * @brief Constructs an empty key-value store with WAL persistence enabled.
+   *
+   * @param wal Write-ahead log used for future mutations.
+   */
+  explicit KVStore(persistence::WriteAheadLog* wal);
 
   /**
    * @brief Inserts or updates a value for a key.
@@ -63,9 +76,19 @@ class KVStore {
    */
   void Clear();
 
+  /**
+   * @brief Replays persisted WAL operations into this store.
+   *
+   * @param wal Write-ahead log to replay.
+   * @return Number of WAL operations applied.
+   */
+  std::size_t ReplayFromWal(const persistence::WriteAheadLog& wal);
+
  private:
   /** @brief Internal storage for key-value pairs. */
   std::unordered_map<std::string, std::string> data_;
+  /** @brief Optional WAL used to persist future mutations. */
+  persistence::WriteAheadLog* wal_ = nullptr;
 };
 
 }  // namespace store

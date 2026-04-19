@@ -10,14 +10,16 @@ APP_SRCS := \
 	src/common/string_utils.cpp \
 	src/parser/command_parser.cpp \
 	src/server/cli_server.cpp \
-	src/store/kv_store.cpp
+	src/store/kv_store.cpp \
+	src/persistence/wal.cpp
 
 TEST_SRCS := \
 	tests/test_kv_store.cpp \
 	src/common/string_utils.cpp \
 	src/parser/command_parser.cpp \
 	src/server/cli_server.cpp \
-	src/store/kv_store.cpp
+	src/store/kv_store.cpp \
+	src/persistence/wal.cpp
 
 APP_OBJS := $(patsubst %.cpp,build/app/%.o,$(APP_SRCS))
 TEST_OBJS := $(patsubst %.cpp,build/test/%.o,$(TEST_SRCS))

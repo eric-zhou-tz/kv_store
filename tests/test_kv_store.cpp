@@ -1,10 +1,14 @@
 #include <cassert>
+#include <cstdio>
+#include <fstream>
 #include <sstream>
 #include <string>
+#include <unordered_map>
 
 #include "parser/command_parser.h"
 #include "server/cli_server.h"
 #include "store/kv_store.h"
+#include "persistence/wal.h"
 
 int main() {
   kv::store::KVStore store;
@@ -21,6 +25,11 @@ int main() {
   assert(set_command.key == "project");
   assert(set_command.value == "kv_store");
 
+  const kv::parser::Command delete_command = parser.Parse("DELETE project");
+  assert(delete_command.IsValid());
+  assert(delete_command.type == kv::parser::CommandType::kDel);
+  assert(delete_command.key == "project");
+
   std::istringstream input("SET name codex\nGET name\nDEL name\nGET name\nEXIT\n");
   std::ostringstream output;
   kv::server::CliServer server(parser, store);
@@ -31,6 +40,48 @@ int main() {
   assert(transcript.find("codex") != std::string::npos);
   assert(transcript.find("(nil)") != std::string::npos);
   assert(transcript.find("Bye") != std::string::npos);
+
+  const std::string wal_path = "/tmp/kv_store_wal_test.log";
+  std::remove(wal_path.c_str());
+
+  {
+    kv::persistence::WriteAheadLog wal(wal_path);
+    kv::store::KVStore logged_store(&wal);
+    logged_store.Set("alpha", "1");
+    logged_store.Set("message", "hello world");
+    assert(logged_store.Delete("alpha"));
+  }
+
+  {
+    kv::persistence::WriteAheadLog wal(wal_path);
+    kv::store::KVStore recovered_store(&wal);
+    const std::size_t recovered_operations = recovered_store.ReplayFromWal(wal);
+    assert(recovered_operations == 3);
+    assert(!recovered_store.Contains("alpha"));
+    assert(recovered_store.Get("message").value() == "hello world");
+  }
+
+  std::remove(wal_path.c_str());
+
+  {
+    std::ofstream malformed_wal(wal_path);
+    malformed_wal << "SET missing_value\n";
+    malformed_wal << "UNKNOWN key value\n";
+    malformed_wal << "DELETE key extra\n";
+    malformed_wal << "SET good value\n";
+    malformed_wal << "DELETE absent\n";
+  }
+
+  {
+    kv::persistence::WriteAheadLog wal(wal_path);
+    std::unordered_map<std::string, std::string> recovered;
+    const std::size_t recovered_operations = wal.replay(recovered);
+    assert(recovered_operations == 2);
+    assert(recovered["good"] == "value");
+    assert(recovered.find("absent") == recovered.end());
+  }
+
+  std::remove(wal_path.c_str());
 
   return 0;
 }

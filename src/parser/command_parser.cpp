@@ -79,9 +79,9 @@ Command CommandParser::Parse(const std::string& input) const {
     return command;
   }
 
-  if (verb == "DEL") {
+  if (verb == "DEL" || verb == "DELETE") {
     if (tokens.size() != 2) {
-      return MakeInvalidCommand("usage: DEL <key>");
+      return MakeInvalidCommand("usage: DELETE <key>");
     }
 
     Command command;
