@@ -16,8 +16,7 @@ persistence, snapshotting, and crash recovery.
 
 ## Demo
 
-Demo GIF placeholder: add a terminal demo showing `SET`/`GET`/`DELETE`, process
-restart, and recovery from snapshot plus WAL replay.
+![KV Store Demo](docs/demo.gif)
 
 ## Features
 
