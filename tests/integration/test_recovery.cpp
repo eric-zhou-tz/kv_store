@@ -95,6 +95,30 @@ TEST_F(RecoveryTest, SnapshotOnlyRecoveryLoadsMaterializedState) {
   EXPECT_EQ("", recovered.Get("empty").value());
 }
 
+TEST_F(RecoveryTest, StoreCanSaveSnapshotThroughPublicApi) {
+  std::uint64_t wal_offset = 0;
+  {
+    WriteAheadLog wal(wal_path_);
+    Snapshot snapshot(snapshot_path_);
+    KVStore store(&wal, &snapshot);
+    store.Set("alpha", "1");
+    store.Set("beta", "2");
+
+    EXPECT_TRUE(store.SaveSnapshot());
+    wal_offset = wal.CurrentOffset();
+  }
+
+  Snapshot snapshot(snapshot_path_);
+  KVStore recovered;
+  const SnapshotLoadResult result = recovered.LoadSnapshot(snapshot);
+
+  EXPECT_TRUE(result.loaded);
+  EXPECT_EQ(2U, result.entry_count);
+  EXPECT_EQ(wal_offset, result.wal_offset);
+  EXPECT_EQ("1", recovered.Get("alpha").value());
+  EXPECT_EQ("2", recovered.Get("beta").value());
+}
+
 TEST_F(RecoveryTest, SnapshotPlusWalTailRecoversFromCoveredOffset) {
   std::uint64_t snapshot_offset = 0;
   {

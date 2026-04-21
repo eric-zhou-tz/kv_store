@@ -79,6 +79,18 @@ void KVStore::ClearPersistence() {
   writes_since_snapshot_ = 0;
 }
 
+bool KVStore::SaveSnapshot() {
+  if (snapshot_ == nullptr) {
+    return false;
+  }
+
+  const std::uint64_t wal_offset =
+      (wal_ != nullptr) ? wal_->CurrentOffset() : 0;
+  snapshot_->Save(data_, wal_offset);
+  writes_since_snapshot_ = 0;
+  return true;
+}
+
 kv::persistence::SnapshotLoadResult KVStore::LoadSnapshot(
     const persistence::Snapshot& snapshot) {
   // Snapshot loading writes directly into the backing map without going through

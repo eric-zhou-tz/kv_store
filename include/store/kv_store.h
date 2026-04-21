@@ -89,6 +89,16 @@ class KVStore {
   void ClearPersistence();
 
   /**
+   * @brief Writes the current in-memory state to the configured snapshot file.
+   *
+   * This is a public persistence operation so callers can checkpoint the store
+   * without depending on the automatic snapshot interval.
+   *
+   * @return `true` when a snapshot was configured and written, otherwise false.
+   */
+  bool SaveSnapshot();
+
+  /**
    * @brief Loads a persisted snapshot directly into this store.
    *
    * Snapshot recovery is separated from WAL replay so startup can restore the

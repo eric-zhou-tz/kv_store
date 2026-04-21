@@ -1,5 +1,37 @@
 # Devlog
 
+## 2026-04-21 — Persisted Baseline Benchmark Suite
+
+What I did:
+- Added a dedicated benchmark harness under `bench/`
+- Implemented write, read, mixed, recovery, and snapshot benchmarks
+- Captured throughput, elapsed time, average latency, p50, p95, and p99 latency
+- Reported WAL and snapshot artifact sizes where relevant
+- Added a lightweight operation-count argument to `./benchmark`
+- Added `make benchmark` and `make run_benchmark` without changing the main executable or test targets
+- Added `KVStore::SaveSnapshot()` so benchmarks can time explicit snapshot creation through the store API
+- Documented the captured persisted-baseline results in `benchmark.md`
+
+Challenges:
+- Keeping the benchmark honest by measuring the current WAL + snapshot path instead of inventing a separate in-memory baseline
+- Timing snapshot creation without reaching into private store internals
+- Making recovery measurements reflect the application startup path: load snapshot first, then replay the WAL tail
+- Keeping output structured enough for documentation while avoiding a heavyweight benchmark framework
+
+Key insights:
+- Write latency reflects both WAL flush cost and automatic snapshot work, so percentile reporting is more useful than averages alone
+- Read throughput is much higher because steady-state reads stay on the in-memory map and do not touch persistence files
+- Separating mixed read and write latency makes the overall mixed workload easier to interpret
+- Benchmark results are only useful if future Phase 3 comparisons preserve workload shape, seed, value size, compiler settings, and machine context
+
+Next steps:
+- Add optional CSV or JSON output if benchmark results start getting tracked over time
+- Consider a release-build benchmark target with explicit optimization flags
+- Add automatic environment metadata capture for compiler, OS, CPU, and git commit
+- Keep benchmarks single-threaded until the project reaches the concurrency phase
+
+---
+
 ## 2026-04-21 — GoogleTest Phase 2 Persistence Tests
 
 What I did:

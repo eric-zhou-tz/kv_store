@@ -10,6 +10,7 @@ LDLIBS ?=
 APP_TARGET := bin/kv_store
 TEST_TARGET := bin/kv_store_tests
 STRESS_TARGET := bin/kv_store_stress_tests
+BENCHMARK_TARGET := benchmark
 
 APP_SRCS := \
 	src/main.cpp \
@@ -42,6 +43,12 @@ STRESS_SRCS := \
 	tests/test_main.cpp \
 	tests/stress/test_stress.cpp \
 	$(TEST_HELPER_SRCS) \
+	$(PERSISTENCE_SRCS)
+
+BENCHMARK_SRCS := \
+	bench/benchmark.cpp \
+	bench/benchmark_utils.cpp \
+	bench/workloads.cpp \
 	$(PERSISTENCE_SRCS)
 
 GTEST_ROOT ?=
@@ -85,13 +92,15 @@ endif
 APP_OBJS := $(patsubst %.cpp,build/app/%.o,$(APP_SRCS))
 TEST_OBJS := $(patsubst %.cpp,build/test/%.o,$(TEST_SRCS))
 STRESS_OBJS := $(patsubst %.cpp,build/stress/%.o,$(STRESS_SRCS))
+BENCHMARK_OBJS := $(patsubst %.cpp,build/bench/%.o,$(BENCHMARK_SRCS))
 
 APP_DEPS := $(APP_OBJS:.o=.d)
 TEST_DEPS := $(TEST_OBJS:.o=.d)
 STRESS_DEPS := $(STRESS_OBJS:.o=.d)
+BENCHMARK_DEPS := $(BENCHMARK_OBJS:.o=.d)
 GTEST_DEPS := $(GTEST_OBJS:.o=.d)
 
-.PHONY: all clean run test test_verbose test_stress check_gtest
+.PHONY: all clean run test test_verbose test_stress run_benchmark check_gtest
 
 all: $(APP_TARGET)
 
@@ -107,6 +116,9 @@ $(STRESS_TARGET): check_gtest $(STRESS_OBJS) $(GTEST_OBJS)
 	mkdir -p $(dir $@)
 	$(CXX) $(LDFLAGS) $(GTEST_LDFLAGS) $(STRESS_OBJS) $(GTEST_OBJS) -o $@ $(LDLIBS) $(GTEST_LDLIBS)
 
+$(BENCHMARK_TARGET): $(BENCHMARK_OBJS)
+	$(CXX) $(LDFLAGS) $(BENCHMARK_OBJS) -o $@ $(LDLIBS)
+
 $(TEST_OBJS) $(STRESS_OBJS): | check_gtest
 
 build/app/%.o: %.cpp
@@ -120,6 +132,10 @@ build/test/%.o: %.cpp
 build/stress/%.o: %.cpp
 	mkdir -p $(dir $@)
 	$(CXX) $(CPPFLAGS) -Itests $(GTEST_CPPFLAGS) $(CXXFLAGS) $(DEPFLAGS) -c $< -o $@
+
+build/bench/%.o: %.cpp
+	mkdir -p $(dir $@)
+	$(CXX) $(CPPFLAGS) -Ibench $(CXXFLAGS) $(DEPFLAGS) -c $< -o $@
 
 build/gtest/gtest-all.o: $(GTEST_VENDOR_DIR)/googletest/src/gtest-all.cc
 	mkdir -p $(dir $@)
@@ -141,13 +157,17 @@ test_verbose: $(TEST_TARGET)
 test_stress: $(STRESS_TARGET)
 	./$(STRESS_TARGET) --gtest_color=yes
 
+run_benchmark: $(BENCHMARK_TARGET)
+	./$(BENCHMARK_TARGET)
+
 run: $(APP_TARGET)
 	./$(APP_TARGET)
 
 clean:
-	rm -rf build bin
+	rm -rf build bin $(BENCHMARK_TARGET)
 
 -include $(APP_DEPS)
 -include $(TEST_DEPS)
 -include $(STRESS_DEPS)
+-include $(BENCHMARK_DEPS)
 -include $(GTEST_DEPS)

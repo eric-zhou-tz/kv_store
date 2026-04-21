@@ -62,10 +62,17 @@ The WAL is intentionally simple:
 
 ```text
 .
+├── bench
+│   ├── benchmark.cpp
+│   ├── benchmark_utils.cpp
+│   ├── benchmark_utils.h
+│   ├── workloads.cpp
+│   └── workloads.h
 ├── Dockerfile
 ├── DESIGN.md
 ├── Makefile
 ├── README.md
+├── benchmark.md
 ├── include
 │   ├── common
 │   │   └── string_utils.h
@@ -154,6 +161,33 @@ Run the bounded stress suite:
 ```bash
 make test_stress
 ```
+
+## Benchmarks
+
+This benchmark suite establishes the baseline performance of the current
+persisted KV store implementation. It measures steady-state read/write
+throughput, latency percentiles, mixed workload behavior, recovery time, and
+snapshot creation cost. These results provide the comparison point for later
+Phase 3 storage-engine and performance optimization work.
+
+Build and run the benchmark executable:
+
+```bash
+make benchmark
+./benchmark
+```
+
+You can pass a smaller or larger operation count when collecting local results:
+
+```bash
+./benchmark 100000
+```
+
+Do not treat the README as a source of benchmark numbers. Capture fresh output
+from the current machine and build when documenting results.
+
+See [benchmark.md](benchmark.md) for the baseline benchmark methodology,
+results, and comparison guidance.
 
 ## Docker
 

@@ -6,6 +6,7 @@
 
 build/
 bin/
+/benchmark
 *.o
 *.out
 *.exe
