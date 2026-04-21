@@ -3,11 +3,24 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
+### Added
+- GoogleTest-based unit, integration, and stress test suites for Phase 2 persistence
+- Makefile targets for `make test`, `make test_verbose`, and `make test_stress`
+- Temporary test directory and binary file helpers for isolated persistence tests
+- GoogleTest bootstrap script for vendoring into `external/googletest`
+
+### Changed
+- Replaced the old assert-based test executable with organized GoogleTest files
+- Updated README testing instructions for GoogleTest setup and stress tests
+- Ignored vendored GoogleTest sources under `external/googletest`
+
+### Fixed
+- Bounded snapshot key/value lengths during load so corrupted snapshots cannot request unbounded allocations
 
 ## [0.2.0] - 2026-04-21
 ### Added
 - Write-ahead logging (WAL) with append-only persistence
-- Binary record format: [length][op][key_size][key]
+- Binary record format for SET and DELETE records
 - WAL replay on startup for crash recovery
 
 ### Changed

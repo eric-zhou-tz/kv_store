@@ -55,7 +55,7 @@ TEST_F(SnapshotTest, MissingSnapshotReturnsNotLoadedAndPreservesMap) {
   Snapshot snapshot(snapshot_path_);
   std::unordered_map<std::string, std::string> store{{"keep", "value"}};
 
-  const SnapshotLoadResult result = snapshot.load(store);
+  const SnapshotLoadResult result = snapshot.Load(store);
 
   EXPECT_FALSE(result.loaded);
   EXPECT_EQ(0U, result.entry_count);
@@ -69,10 +69,10 @@ TEST_F(SnapshotTest, SaveAndLoadRoundTripEntriesAndWalOffset) {
   std::unordered_map<std::string, std::string> original{
       {"alpha", "1"}, {"message", "hello world"}, {"empty", ""}};
 
-  snapshot.save(original, 12345);
+  snapshot.Save(original, 12345);
 
   std::unordered_map<std::string, std::string> loaded;
-  const SnapshotLoadResult result = snapshot.load(loaded);
+  const SnapshotLoadResult result = snapshot.Load(loaded);
 
   EXPECT_TRUE(result.loaded);
   EXPECT_EQ(original.size(), result.entry_count);
@@ -85,7 +85,7 @@ TEST_F(SnapshotTest, EmptySnapshotFileIsTreatedAsNotLoaded) {
   Snapshot snapshot(snapshot_path_);
   std::unordered_map<std::string, std::string> store{{"keep", "value"}};
 
-  const SnapshotLoadResult result = snapshot.load(store);
+  const SnapshotLoadResult result = snapshot.Load(store);
 
   EXPECT_FALSE(result.loaded);
   EXPECT_EQ(0U, result.entry_count);
@@ -99,7 +99,7 @@ TEST_F(SnapshotTest, LegacySnapshotLoadsWithZeroWalOffset) {
   Snapshot snapshot(snapshot_path_);
   std::unordered_map<std::string, std::string> loaded;
 
-  const SnapshotLoadResult result = snapshot.load(loaded);
+  const SnapshotLoadResult result = snapshot.Load(loaded);
 
   EXPECT_TRUE(result.loaded);
   EXPECT_EQ(2U, result.entry_count);
@@ -112,10 +112,10 @@ TEST_F(SnapshotTest, EmptyKeyAndValueRoundTrip) {
   Snapshot snapshot(snapshot_path_);
   std::unordered_map<std::string, std::string> original{{"", ""}};
 
-  snapshot.save(original, 9);
+  snapshot.Save(original, 9);
 
   std::unordered_map<std::string, std::string> loaded;
-  const SnapshotLoadResult result = snapshot.load(loaded);
+  const SnapshotLoadResult result = snapshot.Load(loaded);
 
   EXPECT_TRUE(result.loaded);
   EXPECT_EQ(1U, result.entry_count);
@@ -129,10 +129,10 @@ TEST_F(SnapshotTest, LargeValueRoundTrip) {
   const std::string large_value(512 * 1024, 's');
   std::unordered_map<std::string, std::string> original{{"large", large_value}};
 
-  snapshot.save(original, 1);
+  snapshot.Save(original, 1);
 
   std::unordered_map<std::string, std::string> loaded;
-  const SnapshotLoadResult result = snapshot.load(loaded);
+  const SnapshotLoadResult result = snapshot.Load(loaded);
 
   EXPECT_TRUE(result.loaded);
   EXPECT_EQ(1U, result.entry_count);
@@ -141,11 +141,11 @@ TEST_F(SnapshotTest, LargeValueRoundTrip) {
 
 TEST_F(SnapshotTest, SaveReplacesExistingSnapshot) {
   Snapshot snapshot(snapshot_path_);
-  snapshot.save({{"old", "value"}}, 1);
-  snapshot.save({{"new", "value"}}, 2);
+  snapshot.Save({{"old", "value"}}, 1);
+  snapshot.Save({{"new", "value"}}, 2);
 
   std::unordered_map<std::string, std::string> loaded;
-  const SnapshotLoadResult result = snapshot.load(loaded);
+  const SnapshotLoadResult result = snapshot.Load(loaded);
 
   EXPECT_TRUE(result.loaded);
   EXPECT_EQ(1U, result.entry_count);
@@ -156,10 +156,10 @@ TEST_F(SnapshotTest, SaveReplacesExistingSnapshot) {
 
 TEST_F(SnapshotTest, ClearRemovesSnapshotAndTempFiles) {
   Snapshot snapshot(snapshot_path_);
-  snapshot.save({{"alpha", "1"}}, 0);
+  snapshot.Save({{"alpha", "1"}}, 0);
   WriteBinaryFile(snapshot_path_ + ".tmp", "abandoned");
 
-  snapshot.clear();
+  snapshot.Clear();
 
   EXPECT_FALSE(FileExists(snapshot_path_));
   EXPECT_FALSE(FileExists(snapshot_path_ + ".tmp"));
@@ -168,7 +168,7 @@ TEST_F(SnapshotTest, ClearRemovesSnapshotAndTempFiles) {
 TEST_F(SnapshotTest, ClearMissingFilesIsNoOp) {
   Snapshot snapshot(snapshot_path_);
 
-  EXPECT_NO_THROW(snapshot.clear());
+  EXPECT_NO_THROW(snapshot.Clear());
   EXPECT_FALSE(FileExists(snapshot_path_));
   EXPECT_FALSE(FileExists(snapshot_path_ + ".tmp"));
 }
@@ -184,7 +184,7 @@ TEST_F(SnapshotTest, TruncatedSnapshotThrowsAndPreservesExistingMap) {
   Snapshot snapshot(snapshot_path_);
   std::unordered_map<std::string, std::string> store{{"keep", "value"}};
 
-  EXPECT_THROW(snapshot.load(store), std::runtime_error);
+  EXPECT_THROW(snapshot.Load(store), std::runtime_error);
   ASSERT_EQ(1U, store.size());
   EXPECT_EQ("value", store.at("keep"));
 }
@@ -198,7 +198,7 @@ TEST_F(SnapshotTest, CorruptedMetadataThrowsAndPreservesExistingMap) {
   Snapshot snapshot(snapshot_path_);
   std::unordered_map<std::string, std::string> store{{"keep", "value"}};
 
-  EXPECT_THROW(snapshot.load(store), std::runtime_error);
+  EXPECT_THROW(snapshot.Load(store), std::runtime_error);
   ASSERT_EQ(1U, store.size());
   EXPECT_EQ("value", store.at("keep"));
 }
@@ -216,7 +216,7 @@ TEST_F(SnapshotTest, OversizedKeyLengthThrowsSafelyAndPreservesExistingMap) {
   Snapshot snapshot(snapshot_path_);
   std::unordered_map<std::string, std::string> store{{"keep", "value"}};
 
-  EXPECT_THROW(snapshot.load(store), std::runtime_error);
+  EXPECT_THROW(snapshot.Load(store), std::runtime_error);
   ASSERT_EQ(1U, store.size());
   EXPECT_EQ("value", store.at("keep"));
 }
@@ -236,18 +236,18 @@ TEST_F(SnapshotTest, OversizedValueLengthThrowsSafelyAndPreservesExistingMap) {
   Snapshot snapshot(snapshot_path_);
   std::unordered_map<std::string, std::string> store{{"keep", "value"}};
 
-  EXPECT_THROW(snapshot.load(store), std::runtime_error);
+  EXPECT_THROW(snapshot.Load(store), std::runtime_error);
   ASSERT_EQ(1U, store.size());
   EXPECT_EQ("value", store.at("keep"));
 }
 
 TEST_F(SnapshotTest, MissingSnapshotFileAfterClearLoadsAsNotLoaded) {
   Snapshot snapshot(snapshot_path_);
-  snapshot.save({{"alpha", "1"}}, 7);
-  snapshot.clear();
+  snapshot.Save({{"alpha", "1"}}, 7);
+  snapshot.Clear();
   std::unordered_map<std::string, std::string> loaded;
 
-  const SnapshotLoadResult result = snapshot.load(loaded);
+  const SnapshotLoadResult result = snapshot.Load(loaded);
 
   EXPECT_FALSE(result.loaded);
   EXPECT_EQ(0U, result.entry_count);

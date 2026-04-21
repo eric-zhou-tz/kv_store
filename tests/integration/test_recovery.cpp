@@ -82,7 +82,7 @@ TEST_F(RecoveryTest, PutDeleteOverwriteSequenceRecoversOnlyFinalState) {
 
 TEST_F(RecoveryTest, SnapshotOnlyRecoveryLoadsMaterializedState) {
   Snapshot snapshot(snapshot_path_);
-  snapshot.save({{"alpha", "1"}, {"empty", ""}}, 77);
+  snapshot.Save({{"alpha", "1"}, {"empty", ""}}, 77);
 
   KVStore recovered;
   const SnapshotLoadResult result = recovered.LoadSnapshot(snapshot);
@@ -99,16 +99,16 @@ TEST_F(RecoveryTest, SnapshotPlusWalTailRecoversFromCoveredOffset) {
   std::uint64_t snapshot_offset = 0;
   {
     WriteAheadLog wal(wal_path_);
-    wal.append_set("old-wal", "skip");
-    snapshot_offset = wal.current_offset();
+    wal.AppendSet("old-wal", "skip");
+    snapshot_offset = wal.CurrentOffset();
 
     Snapshot snapshot(snapshot_path_);
-    snapshot.save({{"old", "snapshot"}, {"keep", "snapshot"}},
+    snapshot.Save({{"old", "snapshot"}, {"keep", "snapshot"}},
                   snapshot_offset);
 
-    wal.append_delete("old");
-    wal.append_set("keep", "wal");
-    wal.append_set("new", "wal");
+    wal.AppendDelete("old");
+    wal.AppendSet("keep", "wal");
+    wal.AppendSet("new", "wal");
   }
 
   WriteAheadLog wal(wal_path_);
@@ -131,11 +131,11 @@ TEST_F(RecoveryTest, WalTailAfterSnapshotOverridesSnapshotValues) {
   {
     WriteAheadLog wal(wal_path_);
     Snapshot snapshot(snapshot_path_);
-    snapshot_offset = wal.current_offset();
-    snapshot.save({{"key", "snapshot"}, {"delete-me", "snapshot"}},
+    snapshot_offset = wal.CurrentOffset();
+    snapshot.Save({{"key", "snapshot"}, {"delete-me", "snapshot"}},
                   snapshot_offset);
-    wal.append_set("key", "wal");
-    wal.append_delete("delete-me");
+    wal.AppendSet("key", "wal");
+    wal.AppendDelete("delete-me");
   }
 
   WriteAheadLog wal(wal_path_);
@@ -152,8 +152,8 @@ TEST_F(RecoveryTest, WalTailAfterSnapshotOverridesSnapshotValues) {
 TEST_F(RecoveryTest, MissingSnapshotFallsBackToFullWalReplay) {
   {
     WriteAheadLog wal(wal_path_);
-    wal.append_set("alpha", "1");
-    wal.append_set("beta", "2");
+    wal.AppendSet("alpha", "1");
+    wal.AppendSet("beta", "2");
   }
 
   WriteAheadLog wal(wal_path_);
@@ -190,10 +190,10 @@ TEST_F(RecoveryTest, CorruptedSnapshotThrowsWithoutReplacingLiveStore) {
 TEST_F(RecoveryTest, StartupRecoveryIsIdempotentAcrossFreshStores) {
   {
     WriteAheadLog wal(wal_path_);
-    wal.append_set("a", "1");
-    wal.append_set("a", "2");
-    wal.append_set("b", "3");
-    wal.append_delete("b");
+    wal.AppendSet("a", "1");
+    wal.AppendSet("a", "2");
+    wal.AppendSet("b", "3");
+    wal.AppendDelete("b");
   }
 
   WriteAheadLog wal(wal_path_);
@@ -209,7 +209,7 @@ TEST_F(RecoveryTest, StartupRecoveryIsIdempotentAcrossFreshStores) {
 
 TEST_F(RecoveryTest, ClearPersistenceKeepsMemoryButResetsDurableState) {
   Snapshot snapshot(snapshot_path_);
-  snapshot.save({{"from-snapshot", "old"}}, 0);
+  snapshot.Save({{"from-snapshot", "old"}}, 0);
 
   {
     WriteAheadLog wal(wal_path_);
@@ -225,12 +225,12 @@ TEST_F(RecoveryTest, ClearPersistenceKeepsMemoryButResetsDurableState) {
   }
 
   std::unordered_map<std::string, std::string> loaded_snapshot;
-  const SnapshotLoadResult snapshot_result = snapshot.load(loaded_snapshot);
+  const SnapshotLoadResult snapshot_result = snapshot.Load(loaded_snapshot);
   EXPECT_FALSE(snapshot_result.loaded);
 
   WriteAheadLog wal(wal_path_);
   std::unordered_map<std::string, std::string> replayed;
-  EXPECT_EQ(1U, wal.replay(replayed));
+  EXPECT_EQ(1U, wal.Replay(replayed));
   ASSERT_EQ(1U, replayed.size());
   EXPECT_EQ("new", replayed.at("after-clear"));
   EXPECT_EQ(replayed.end(), replayed.find("before-clear"));
@@ -239,13 +239,13 @@ TEST_F(RecoveryTest, ClearPersistenceKeepsMemoryButResetsDurableState) {
 TEST_F(RecoveryTest, RepeatedOpenCloseCyclesAppendAndReplayAllRecords) {
   for (int i = 0; i < 100; ++i) {
     WriteAheadLog wal(wal_path_);
-    wal.append_set("key-" + std::to_string(i), "value-" + std::to_string(i));
+    wal.AppendSet("key-" + std::to_string(i), "value-" + std::to_string(i));
   }
 
   WriteAheadLog wal(wal_path_);
   std::unordered_map<std::string, std::string> recovered;
 
-  EXPECT_EQ(100U, wal.replay(recovered));
+  EXPECT_EQ(100U, wal.Replay(recovered));
   ASSERT_EQ(100U, recovered.size());
   EXPECT_EQ("value-0", recovered.at("key-0"));
   EXPECT_EQ("value-99", recovered.at("key-99"));

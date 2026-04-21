@@ -17,8 +17,8 @@ void KVStore::MaybeSnapshot() {
     // snapshot here the current WAL offset safely includes all checkpointed
     // writes.
     const std::uint64_t wal_offset =
-        (wal_ != nullptr) ? wal_->current_offset() : 0;
-    snapshot_->save(data_, wal_offset);
+        (wal_ != nullptr) ? wal_->CurrentOffset() : 0;
+    snapshot_->Save(data_, wal_offset);
     writes_since_snapshot_ = 0;
   }
 }
@@ -27,7 +27,7 @@ void KVStore::Set(const std::string& key, const std::string& value) {
   if (wal_ != nullptr) {
     // Persist before mutating memory so a successful in-memory write has an
     // earlier durable record to replay after a crash.
-    wal_->append_set(key, value);
+    wal_->AppendSet(key, value);
   }
   data_[key] = value;
   ++writes_since_snapshot_;
@@ -46,7 +46,7 @@ bool KVStore::Delete(const std::string& key) {
   if (wal_ != nullptr) {
     // Log delete attempts even when the key is absent; replaying the same
     // operation is idempotent and preserves command ordering.
-    wal_->append_delete(key);
+    wal_->AppendDelete(key);
   }
   const bool erased = data_.erase(key) > 0;
   ++writes_since_snapshot_;
@@ -64,16 +64,17 @@ std::size_t KVStore::Size() const {
 
 void KVStore::Clear() {
   data_.clear();
+  writes_since_snapshot_ = 0;
 }
 
 void KVStore::ClearPersistence() {
   // This is an administrative durability reset: it removes persisted recovery
   // files but intentionally leaves the live in-memory map untouched.
   if (wal_ != nullptr) {
-    wal_->clear();
+    wal_->Clear();
   }
   if (snapshot_ != nullptr) {
-    snapshot_->clear();
+    snapshot_->Clear();
   }
   writes_since_snapshot_ = 0;
 }
@@ -82,14 +83,14 @@ kv::persistence::SnapshotLoadResult KVStore::LoadSnapshot(
     const persistence::Snapshot& snapshot) {
   // Snapshot loading writes directly into the backing map without going through
   // Set/Delete, because recovery should not append recovered data back to WAL.
-  return snapshot.load(data_);
+  return snapshot.Load(data_);
 }
 
 std::size_t KVStore::ReplayFromWal(const persistence::WriteAheadLog& wal,
                                    std::uint64_t offset) {
   // Recovery applies directly to the backing map so it does not append the
   // recovered operations back into the WAL.
-  return wal.replay_from(offset, data_);
+  return wal.ReplayFrom(offset, data_);
 }
 
 }  // namespace store

@@ -41,7 +41,7 @@ using SizeType = std::uint32_t;
  * @throws std::runtime_error if the stream write fails.
  */
 template <typename T>
-void write_primitive(std::ostream& out, const T& value,
+void WritePrimitive(std::ostream& out, const T& value,
                      const char* description = "binary primitive") {
   out.write(reinterpret_cast<const char*>(&value), sizeof(T));
   if (!out) {
@@ -58,7 +58,7 @@ void write_primitive(std::ostream& out, const T& value,
  * @return `true` when a complete value was read, otherwise `false`.
  */
 template <typename T>
-bool read_primitive(std::istream& in, T& value) {
+bool ReadPrimitive(std::istream& in, T& value) {
   // Return false for short reads so callers can stop cleanly at torn trailing
   // records.
   in.read(reinterpret_cast<char*>(&value), sizeof(T));
@@ -76,7 +76,7 @@ bool read_primitive(std::istream& in, T& value) {
  * @param description Human-readable byte-field description used in errors.
  * @throws std::runtime_error if the stream write fails.
  */
-inline void write_bytes(std::ostream& out, const std::string& bytes,
+inline void WriteBytes(std::ostream& out, const std::string& bytes,
                         const char* description = "binary bytes") {
   out.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
   if (!out) {
@@ -92,7 +92,7 @@ inline void write_bytes(std::ostream& out, const std::string& bytes,
  * @return The string length cast to SizeType.
  * @throws std::runtime_error if the string is too large to encode.
  */
-inline SizeType checked_size(const std::string& bytes,
+inline SizeType CheckedSize(const std::string& bytes,
                              const char* field_name) {
   if (bytes.size() > std::numeric_limits<SizeType>::max()) {
     throw std::runtime_error(std::string(field_name) + " is too large");
@@ -113,7 +113,7 @@ inline SizeType checked_size(const std::string& bytes,
  * @return `true` when a complete value was consumed, otherwise `false`.
  */
 template <typename T>
-bool consume_primitive(const std::string& buffer, std::size_t& offset,
+bool ConsumePrimitive(const std::string& buffer, std::size_t& offset,
                        T& value) {
   if (offset > buffer.size() || buffer.size() - offset < sizeof(T)) {
     return false;
@@ -135,7 +135,7 @@ bool consume_primitive(const std::string& buffer, std::size_t& offset,
  * @param value Output string populated with the consumed bytes.
  * @return `true` when the bytes were consumed, otherwise `false`.
  */
-inline bool consume_bytes(const std::string& buffer, std::size_t& offset,
+inline bool ConsumeBytes(const std::string& buffer, std::size_t& offset,
                           SizeType size, std::string& value) {
   if (offset > buffer.size() || buffer.size() - offset < size) {
     return false;

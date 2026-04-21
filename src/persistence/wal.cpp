@@ -33,7 +33,7 @@ LengthType checked_record_length(std::size_t record_length) {
   return static_cast<LengthType>(record_length);
 }
 
-// Reconstruct the KV store by line
+// Applies a single framed WAL record to the store map.
 bool apply_record(const std::string& record,
                   std::unordered_map<std::string, std::string>& store) {
   std::size_t offset = 0;
@@ -42,19 +42,19 @@ bool apply_record(const std::string& record,
 
   // Operation
   OpType op = 0;
-  if (!binary_io::consume_primitive(record, offset, op)) {
+  if (!binary_io::ConsumePrimitive(record, offset, op)) {
     return false;
   }
 
   // Key Size
   SizeType key_size = 0;
-  if (!binary_io::consume_primitive(record, offset, key_size)) {
+  if (!binary_io::ConsumePrimitive(record, offset, key_size)) {
     return false;
   }
 
   // Key itself
   std::string key;
-  if (!binary_io::consume_bytes(record, offset, key_size, key)) {
+  if (!binary_io::ConsumeBytes(record, offset, key_size, key)) {
     return false;
   }
 
@@ -63,12 +63,12 @@ bool apply_record(const std::string& record,
     // SET records carry exactly one value after the key. Extra trailing bytes
     // make the record malformed.
     SizeType value_size = 0;
-    if (!binary_io::consume_primitive(record, offset, value_size)) {
+    if (!binary_io::ConsumePrimitive(record, offset, value_size)) {
       return false;
     }
 
     std::string value;
-    if (!binary_io::consume_bytes(record, offset, value_size, value) ||
+    if (!binary_io::ConsumeBytes(record, offset, value_size, value) ||
         offset != record.size()) {
       return false;
     }
@@ -92,7 +92,6 @@ bool apply_record(const std::string& record,
 
 }  // namespace
 
-// Constructor
 WriteAheadLog::WriteAheadLog(std::string path)
     : path_(std::move(path)),
       output_(path_, std::ios::binary | std::ios::app) {
@@ -101,23 +100,22 @@ WriteAheadLog::WriteAheadLog(std::string path)
   }
 }
 
-// write in WAL functions
-void WriteAheadLog::append_set(const std::string& key, const std::string& value) {
+void WriteAheadLog::AppendSet(const std::string& key, const std::string& value) {
   const OpType op = static_cast<OpType>(WalOp::Set);
-  const SizeType key_size = binary_io::checked_size(key, "WAL key");
-  const SizeType value_size = binary_io::checked_size(value, "WAL value");
+  const SizeType key_size = binary_io::CheckedSize(key, "WAL key");
+  const SizeType value_size = binary_io::CheckedSize(value, "WAL value");
   // Length covers the payload after the length field itself:
   // [op][key_size][key][value_size][value].
   const LengthType record_length =
       checked_record_length(sizeof(op) + sizeof(key_size) + key_size +
                             sizeof(value_size) + value_size);
 
-  binary_io::write_primitive(output_, record_length, "WAL primitive");
-  binary_io::write_primitive(output_, op, "WAL primitive");
-  binary_io::write_primitive(output_, key_size, "WAL primitive");
-  binary_io::write_bytes(output_, key, "WAL bytes");
-  binary_io::write_primitive(output_, value_size, "WAL primitive");
-  binary_io::write_bytes(output_, value, "WAL bytes");
+  binary_io::WritePrimitive(output_, record_length, "WAL primitive");
+  binary_io::WritePrimitive(output_, op, "WAL primitive");
+  binary_io::WritePrimitive(output_, key_size, "WAL primitive");
+  binary_io::WriteBytes(output_, key, "WAL bytes");
+  binary_io::WritePrimitive(output_, value_size, "WAL primitive");
+  binary_io::WriteBytes(output_, value, "WAL bytes");
 
   output_.flush();
   if (!output_) {
@@ -125,18 +123,18 @@ void WriteAheadLog::append_set(const std::string& key, const std::string& value)
   }
 }
 
-void WriteAheadLog::append_delete(const std::string& key) {
+void WriteAheadLog::AppendDelete(const std::string& key) {
   const OpType op = static_cast<OpType>(WalOp::Delete);
-  const SizeType key_size = binary_io::checked_size(key, "WAL key");
+  const SizeType key_size = binary_io::CheckedSize(key, "WAL key");
   // Length covers the payload after the length field itself:
   // [op][key_size][key].
   const LengthType record_length =
       checked_record_length(sizeof(op) + sizeof(key_size) + key_size);
 
-  binary_io::write_primitive(output_, record_length, "WAL primitive");
-  binary_io::write_primitive(output_, op, "WAL primitive");
-  binary_io::write_primitive(output_, key_size, "WAL primitive");
-  binary_io::write_bytes(output_, key, "WAL bytes");
+  binary_io::WritePrimitive(output_, record_length, "WAL primitive");
+  binary_io::WritePrimitive(output_, op, "WAL primitive");
+  binary_io::WritePrimitive(output_, key_size, "WAL primitive");
+  binary_io::WriteBytes(output_, key, "WAL bytes");
 
   output_.flush();
   if (!output_) {
@@ -144,7 +142,7 @@ void WriteAheadLog::append_delete(const std::string& key) {
   }
 }
 
-std::uint64_t WriteAheadLog::current_offset() {
+std::uint64_t WriteAheadLog::CurrentOffset() {
   output_.flush();
   if (!output_) {
     throw std::runtime_error("failed to flush WAL before reading offset");
@@ -163,7 +161,7 @@ std::uint64_t WriteAheadLog::current_offset() {
   return static_cast<std::uint64_t>(position);
 }
 
-void WriteAheadLog::clear() {
+void WriteAheadLog::Clear() {
   // The WAL keeps an append stream open for normal writes. Close and reopen it
   // around truncation so future SET/DELETE records continue using the same WAL
   // object after persistence has been cleared.
@@ -188,13 +186,12 @@ void WriteAheadLog::clear() {
   }
 }
 
-// Replay the KV store after startup
-std::size_t WriteAheadLog::replay(
+std::size_t WriteAheadLog::Replay(
     std::unordered_map<std::string, std::string>& store) const {
-  return replay_from(0, store);
+  return ReplayFrom(0, store);
 }
 
-std::size_t WriteAheadLog::replay_from(
+std::size_t WriteAheadLog::ReplayFrom(
     std::uint64_t offset,
     std::unordered_map<std::string, std::string>& store) const {
   if (offset > static_cast<std::uint64_t>(
@@ -218,7 +215,7 @@ std::size_t WriteAheadLog::replay_from(
     // Each iteration reads one framed record. A missing length means ordinary
     // EOF; a partial payload means the last write was torn and recovery stops.
     LengthType record_length = 0;
-    if (!binary_io::read_primitive(input, record_length)) {
+    if (!binary_io::ReadPrimitive(input, record_length)) {
       break;
     }
 

@@ -28,14 +28,14 @@ class WriteAheadLog {
    * @param key Key being written.
    * @param value Value being written.
    */
-  void append_set(const std::string& key, const std::string& value);
+  void AppendSet(const std::string& key, const std::string& value);
 
   /**
    * @brief Appends and flushes a DELETE record.
    *
    * @param key Key being deleted.
    */
-  void append_delete(const std::string& key);
+  void AppendDelete(const std::string& key);
 
   /**
    * @brief Returns the current durable end offset of the WAL file.
@@ -45,14 +45,14 @@ class WriteAheadLog {
    *
    * @return Current byte offset from the beginning of the WAL file.
    */
-  std::uint64_t current_offset();
+  std::uint64_t CurrentOffset();
 
   /**
    * @brief Truncates the WAL file and reopens it for future append records.
    *
    * This clears durable history without changing any in-memory store state.
    */
-  void clear();
+  void Clear();
 
   /**
    * @brief Replays valid WAL records into an in-memory map.
@@ -63,7 +63,7 @@ class WriteAheadLog {
    * @param store Store map to update while replaying the log.
    * @return Number of valid operations applied.
    */
-  std::size_t replay(std::unordered_map<std::string, std::string>& store) const;
+  std::size_t Replay(std::unordered_map<std::string, std::string>& store) const;
 
   /**
    * @brief Replays valid WAL records starting at a byte offset.
@@ -75,7 +75,7 @@ class WriteAheadLog {
    * @param store Store map to update while replaying the log.
    * @return Number of valid operations applied.
    */
-  std::size_t replay_from(
+  std::size_t ReplayFrom(
       std::uint64_t offset,
       std::unordered_map<std::string, std::string>& store) const;
 

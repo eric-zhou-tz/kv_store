@@ -29,7 +29,7 @@ class StressTest : public ::testing::Test {
     WriteAheadLog wal(wal_path_);
     std::unordered_map<std::string, std::string> recovered;
 
-    wal.replay(recovered);
+    wal.Replay(recovered);
 
     ASSERT_EQ(expected.size(), recovered.size());
     for (const auto& entry : expected) {
@@ -68,10 +68,10 @@ TEST_F(StressTest, DeterministicMixedWorkloadReplaysReferenceModel) {
       if (op_dist(rng) < 65) {
         const std::string value =
             "value-" + std::to_string(i) + "-" + std::to_string(rng());
-        wal.append_set(key, value);
+        wal.AppendSet(key, value);
         expected[key] = value;
       } else {
-        wal.append_delete(key);
+        wal.AppendDelete(key);
         expected.erase(key);
       }
     }
@@ -106,7 +106,7 @@ TEST_F(StressTest, ManyDistinctKeysRecoverAllValues) {
     for (int i = 0; i < kKeys; ++i) {
       const std::string key = "key-" + std::to_string(i);
       const std::string value = "value-" + std::to_string(i);
-      wal.append_set(key, value);
+      wal.AppendSet(key, value);
       expected[key] = value;
     }
   }
@@ -123,7 +123,7 @@ TEST_F(StressTest, LargeValuesRemainRecoverableWithinPracticalLimits) {
     for (int i = 0; i < kRecords; ++i) {
       const std::string key = "large-" + std::to_string(i);
       const std::string versioned_value = value + std::to_string(i);
-      wal.append_set(key, versioned_value);
+      wal.AppendSet(key, versioned_value);
       expected[key] = versioned_value;
     }
   }

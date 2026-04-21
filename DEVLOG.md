@@ -1,5 +1,33 @@
 # Devlog
 
+## 2026-04-21 — GoogleTest Phase 2 Persistence Tests
+
+What I did:
+- Replaced the assert-based test executable with GoogleTest
+- Added Makefile targets for normal, verbose, and bounded stress test runs
+- Organized tests into unit, integration, stress, and reusable helper files
+- Covered KV store behavior, WAL replay, binary corruption cases, snapshot load/save, and recovery flows
+- Added a bootstrap script for vendoring GoogleTest into `external/googletest`
+
+Challenges:
+- Keeping GoogleTest integration Make-friendly without migrating the project to CMake
+- Avoiding `src/main.cpp` in test binaries to prevent duplicate entry points
+- Testing malformed WAL and snapshot inputs without polluting the repository
+- Keeping stress tests useful while still fast enough for local development
+
+Key insights:
+- Path-injected WAL and snapshot objects made persistence tests straightforward
+- Temp directories are enough for isolated recovery tests; no mocks were needed
+- Corruption tests are most useful when they assert both behavior and preservation of prior valid state
+- Snapshot parsing needed the same bounded-allocation mindset already present in WAL replay
+
+Next steps:
+- Consider adding checksum validation to WAL records
+- Add coverage reporting only if it stays lightweight
+- Keep future persistence tests close to concrete recovery behavior
+
+---
+
 ## 2026-04-21 — WAL Implementation
 
 What I did:

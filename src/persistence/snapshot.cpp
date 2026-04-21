@@ -40,18 +40,18 @@ CountType checked_entry_count(std::size_t count) {
 
 void write_entry(std::ofstream& output, const std::string& key,
                  const std::string& value) {
-  const SizeType key_size = binary_io::checked_size(key, "Snapshot key");
-  const SizeType value_size = binary_io::checked_size(value, "Snapshot value");
+  const SizeType key_size = binary_io::CheckedSize(key, "Snapshot key");
+  const SizeType value_size = binary_io::CheckedSize(value, "Snapshot value");
 
-  binary_io::write_primitive(output, key_size, "Snapshot key size");
-  binary_io::write_bytes(output, key, "Snapshot key");
-  binary_io::write_primitive(output, value_size, "Snapshot value size");
-  binary_io::write_bytes(output, value, "Snapshot value");
+  binary_io::WritePrimitive(output, key_size, "Snapshot key size");
+  binary_io::WriteBytes(output, key, "Snapshot key");
+  binary_io::WritePrimitive(output, value_size, "Snapshot value size");
+  binary_io::WriteBytes(output, value, "Snapshot value");
 }
 
 bool read_entry(std::ifstream& input, std::string& key, std::string& value) {
   SizeType key_size = 0;
-  if (!binary_io::read_primitive(input, key_size)) {
+  if (!binary_io::ReadPrimitive(input, key_size)) {
     return false;
   }
 
@@ -66,7 +66,7 @@ bool read_entry(std::ifstream& input, std::string& key, std::string& value) {
   }
 
   SizeType value_size = 0;
-  if (!binary_io::read_primitive(input, value_size)) {
+  if (!binary_io::ReadPrimitive(input, value_size)) {
     return false;
   }
 
@@ -90,7 +90,7 @@ bool read_entry(std::ifstream& input, std::string& key, std::string& value) {
 
 Snapshot::Snapshot(std::string path) : path_(std::move(path)) {}
 
-void Snapshot::save(
+void Snapshot::Save(
     const std::unordered_map<std::string, std::string>& store,
     std::uint64_t wal_offset) const {
   const std::string temp_path = path_ + ".tmp";
@@ -104,10 +104,10 @@ void Snapshot::save(
                                temp_path);
     }
 
-    binary_io::write_primitive(output, kSnapshotMagic, "Snapshot magic");
-    binary_io::write_primitive(output, kSnapshotVersion, "Snapshot version");
-    binary_io::write_primitive(output, wal_offset, "Snapshot WAL offset");
-    binary_io::write_primitive(output, entry_count, "Snapshot entry count");
+    binary_io::WritePrimitive(output, kSnapshotMagic, "Snapshot magic");
+    binary_io::WritePrimitive(output, kSnapshotVersion, "Snapshot version");
+    binary_io::WritePrimitive(output, wal_offset, "Snapshot WAL offset");
+    binary_io::WritePrimitive(output, entry_count, "Snapshot entry count");
     for (const auto& entry : store) {
       write_entry(output, entry.first, entry.second);
     }
@@ -123,7 +123,7 @@ void Snapshot::save(
   }
 }
 
-void Snapshot::clear() const {
+void Snapshot::Clear() const {
   // Clear both the committed snapshot and any abandoned temp file from an
   // interrupted save. The in-memory store decides separately whether data
   // should also be cleared.
@@ -131,7 +131,7 @@ void Snapshot::clear() const {
   remove_if_exists(path_ + ".tmp", "temp snapshot file");
 }
 
-SnapshotLoadResult Snapshot::load(
+SnapshotLoadResult Snapshot::Load(
     std::unordered_map<std::string, std::string>& store) const {
   std::ifstream input(path_, std::ios::binary);
   if (!input.is_open()) {
@@ -141,16 +141,16 @@ SnapshotLoadResult Snapshot::load(
   std::uint64_t wal_offset = 0;
   CountType entry_count = 0;
   std::uint32_t first_field = 0;
-  if (!binary_io::read_primitive(input, first_field)) {
+  if (!binary_io::ReadPrimitive(input, first_field)) {
     return {};
   }
 
   if (first_field == kSnapshotMagic) {
     std::uint32_t version = 0;
-    if (!binary_io::read_primitive(input, version) ||
+    if (!binary_io::ReadPrimitive(input, version) ||
         version != kSnapshotVersion ||
-        !binary_io::read_primitive(input, wal_offset) ||
-        !binary_io::read_primitive(input, entry_count)) {
+        !binary_io::ReadPrimitive(input, wal_offset) ||
+        !binary_io::ReadPrimitive(input, entry_count)) {
       throw std::runtime_error("failed to load snapshot metadata");
     }
   } else {

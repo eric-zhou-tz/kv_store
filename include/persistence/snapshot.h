@@ -45,7 +45,7 @@ class Snapshot {
    * @param store In-memory key-value data to persist.
    * @param wal_offset WAL byte offset covered by this snapshot.
    */
-  void save(const std::unordered_map<std::string, std::string>& store,
+  void Save(const std::unordered_map<std::string, std::string>& store,
             std::uint64_t wal_offset = 0) const;
 
   /**
@@ -53,7 +53,7 @@ class Snapshot {
    *
    * Missing files are treated as already cleared.
    */
-  void clear() const;
+  void Clear() const;
 
   /**
    * @brief Loads snapshot contents into a store map.
@@ -64,7 +64,7 @@ class Snapshot {
    * @param store In-memory map to populate.
    * @return Snapshot metadata including entry count and covered WAL offset.
    */
-  SnapshotLoadResult load(
+  SnapshotLoadResult Load(
       std::unordered_map<std::string, std::string>& store) const;
 
  private:
