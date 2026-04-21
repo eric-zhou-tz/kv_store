@@ -1,0 +1,2 @@
+#ifndef KV_STORE_SNAPSHOT_
+#define KV_STORE_SNAPSHOT_

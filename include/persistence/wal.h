@@ -19,7 +19,7 @@ class WriteAheadLog {
    *
    * @param path Path to the WAL file.
    */
-  explicit WriteAheadLog(std::string path = "wal.log");
+  explicit WriteAheadLog(std::string path = "kv_store.wal");
 
   /**
    * @brief Appends and flushes a SET record.
@@ -39,7 +39,8 @@ class WriteAheadLog {
   /**
    * @brief Replays valid WAL records into an in-memory map.
    *
-   * Malformed lines are ignored.
+   * Malformed bounded records are skipped. Replay stops at EOF, an incomplete
+   * trailing record, or an impossible record length.
    *
    * @param store Store map to update while replaying the log.
    * @return Number of valid operations applied.
@@ -47,13 +48,6 @@ class WriteAheadLog {
   std::size_t replay(std::unordered_map<std::string, std::string>& store) const;
 
  private:
-  /**
-   * @brief Appends a complete WAL line and flushes it.
-   *
-   * @param line Complete WAL record without the trailing newline.
-   */
-  void append_line(const std::string& line);
-
   /** @brief Filesystem path of the WAL file. */
   std::string path_;
   /** @brief Append stream kept open for write path operations. */

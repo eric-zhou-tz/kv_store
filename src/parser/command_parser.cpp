@@ -19,6 +19,8 @@ namespace {
  */
 std::string JoinTokens(const std::vector<std::string_view>& tokens, std::size_t begin_index) {
   std::ostringstream joined;
+  // SET values may contain spaces, so everything after the key is preserved as
+  // the value with single spaces between parsed tokens.
   for (std::size_t index = begin_index; index < tokens.size(); ++index) {
     if (index > begin_index) {
       joined << ' ';
@@ -48,6 +50,8 @@ bool Command::IsValid() const {
 }
 
 Command CommandParser::Parse(const std::string& input) const {
+  // Normalize only the command framing. Key and value contents keep their
+  // original casing.
   const std::string trimmed = common::Trim(input);
   if (trimmed.empty()) {
     return MakeInvalidCommand("empty command");
@@ -57,6 +61,8 @@ Command CommandParser::Parse(const std::string& input) const {
   const std::string verb = common::ToUpper(tokens.front());
 
   if (verb == "SET") {
+    // Require at least one value token, then join the remaining tokens so
+    // values such as "hello world" survive parsing.
     if (tokens.size() < 3) {
       return MakeInvalidCommand("usage: SET <key> <value>");
     }
@@ -80,6 +86,8 @@ Command CommandParser::Parse(const std::string& input) const {
   }
 
   if (verb == "DEL" || verb == "DELETE") {
+    // The CLI exposes both spellings, but storage receives one delete command
+    // type either way.
     if (tokens.size() != 2) {
       return MakeInvalidCommand("usage: DELETE <key>");
     }

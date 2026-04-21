@@ -15,10 +15,13 @@ void CliServer::Run(std::istream& input, std::ostream& output) {
   std::string line;
 
   while (running) {
+    // Flush the prompt immediately so interactive users see it before input is
+    // read.
     output << "kv-store> ";
     output.flush();
 
     if (!std::getline(input, line)) {
+      // Treat EOF as a clean shutdown path for piped input and terminal Ctrl-D.
       output << '\n';
       break;
     }
@@ -30,11 +33,15 @@ void CliServer::Run(std::istream& input, std::ostream& output) {
 
 void CliServer::Execute(const parser::Command& command, std::ostream& output, bool& running) {
   if (!command.IsValid()) {
+    // Parser errors are reported as normal command output instead of
+    // exceptions, keeping the loop alive for the next command.
     output << "ERR " << command.error_message << '\n';
     return;
   }
 
   try {
+    // Keep command dispatch thin: parsing already validated arity, and storage
+    // owns persistence side effects.
     switch (command.type) {
       case parser::CommandType::kSet:
         store_.Set(command.key, command.value);
@@ -56,10 +63,14 @@ void CliServer::Execute(const parser::Command& command, std::ostream& output, bo
         running = false;
         break;
       case parser::CommandType::kInvalid:
+        // Defensive fallback in case an invalid command bypasses the guard
+        // above.
         output << "ERR invalid command\n";
         break;
     }
   } catch (const std::exception& error) {
+    // Surface storage or WAL failures to the CLI without terminating the
+    // process.
     output << "ERR " << error.what() << '\n';
   }
 }

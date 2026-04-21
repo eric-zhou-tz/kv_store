@@ -1,5 +1,6 @@
 #include <cassert>
 #include <cstdio>
+#include <cstdint>
 #include <fstream>
 #include <sstream>
 #include <string>
@@ -10,7 +11,37 @@
 #include "store/kv_store.h"
 #include "persistence/wal.h"
 
+namespace {
+
+template <typename T>
+void WritePrimitive(std::ofstream& output, const T& value) {
+  output.write(reinterpret_cast<const char*>(&value), sizeof(T));
+}
+
+void AppendUnknownWalRecord(const std::string& path) {
+  // Unknown operations are framed correctly so replay can skip them and keep
+  // reading later records.
+  std::ofstream output(path, std::ios::binary | std::ios::app);
+  const std::uint32_t record_length = sizeof(std::uint8_t);
+  const std::uint8_t op = 99;
+  WritePrimitive(output, record_length);
+  WritePrimitive(output, op);
+}
+
+void AppendTruncatedWalRecord(const std::string& path) {
+  // The length promises more bytes than are written, simulating a crash during
+  // the final WAL append.
+  std::ofstream output(path, std::ios::binary | std::ios::app);
+  const std::uint32_t record_length = 8;
+  const std::uint8_t op = 1;
+  WritePrimitive(output, record_length);
+  WritePrimitive(output, op);
+}
+
+}  // namespace
+
 int main() {
+  // Basic in-memory store behavior without persistence.
   kv::store::KVStore store;
   store.Set("alpha", "1");
   assert(store.Contains("alpha"));
@@ -18,6 +49,7 @@ int main() {
   assert(store.Delete("alpha"));
   assert(!store.Get("alpha").has_value());
 
+  // Parser accepts command aliases and preserves SET values.
   kv::parser::CommandParser parser;
   const kv::parser::Command set_command = parser.Parse("SET project kv_store");
   assert(set_command.IsValid());
@@ -30,6 +62,7 @@ int main() {
   assert(delete_command.type == kv::parser::CommandType::kDel);
   assert(delete_command.key == "project");
 
+  // Exercise the CLI loop through streams so the test stays deterministic.
   std::istringstream input("SET name codex\nGET name\nDEL name\nGET name\nEXIT\n");
   std::ostringstream output;
   kv::server::CliServer server(parser, store);
@@ -44,6 +77,8 @@ int main() {
   const std::string wal_path = "/tmp/kv_store_wal_test.log";
   std::remove(wal_path.c_str());
 
+  // Write a real WAL through the store, including a value with spaces and a
+  // delete that must survive replay.
   {
     kv::persistence::WriteAheadLog wal(wal_path);
     kv::store::KVStore logged_store(&wal);
@@ -52,6 +87,7 @@ int main() {
     assert(logged_store.Delete("alpha"));
   }
 
+  // Reopen the WAL to mimic a process restart.
   {
     kv::persistence::WriteAheadLog wal(wal_path);
     kv::store::KVStore recovered_store(&wal);
@@ -63,15 +99,24 @@ int main() {
 
   std::remove(wal_path.c_str());
 
+  // Replay should count and apply valid records while skipping malformed
+  // bounded records.
   {
-    std::ofstream malformed_wal(wal_path);
-    malformed_wal << "SET missing_value\n";
-    malformed_wal << "UNKNOWN key value\n";
-    malformed_wal << "DELETE key extra\n";
-    malformed_wal << "SET good value\n";
-    malformed_wal << "DELETE absent\n";
+    kv::persistence::WriteAheadLog wal(wal_path);
+    wal.append_set("good", "value");
   }
 
+  AppendUnknownWalRecord(wal_path);
+
+  {
+    kv::persistence::WriteAheadLog wal(wal_path);
+    wal.append_delete("absent");
+  }
+
+  AppendTruncatedWalRecord(wal_path);
+
+  // The truncated trailing record stops recovery after the earlier valid
+  // records.
   {
     kv::persistence::WriteAheadLog wal(wal_path);
     std::unordered_map<std::string, std::string> recovered;
