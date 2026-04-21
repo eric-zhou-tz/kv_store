@@ -4,19 +4,30 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 ### Added
+- Snapshot persistence with covered WAL offsets for snapshot-plus-WAL recovery
+- Automatic snapshot checkpoints after the fixed write interval
+- `CLEAR PERSISTENCE` CLI command for clearing durable recovery files while
+  keeping live memory intact
 - Comprehensive benchmark suite for the current persisted KV store baseline
 - Benchmark workloads for write, read, mixed, recovery, and snapshot timing
 - Benchmark latency statistics including average, p50, p95, and p99
 - Persistence artifact size reporting for WAL and snapshot files
 - Makefile benchmark target via `make benchmark` and `./benchmark`
-- Formal `benchmark.md` report with baseline results, methodology, and Phase 3 comparison guidance
-- Public `KVStore::SaveSnapshot()` checkpoint API for explicit snapshot timing and operational checkpointing
-- GoogleTest-based unit, integration, and stress test suites for Phase 2 persistence
+- Formal `benchmark.md` report with baseline results, methodology, and Phase 3
+  comparison guidance
+- Public `KVStore::SaveSnapshot()` checkpoint API for explicit snapshot timing
+  and operational checkpointing
+- GoogleTest-based unit, integration, and stress test suites for Phase 2
+  persistence
 - Makefile targets for `make test`, `make test_verbose`, and `make test_stress`
 - Temporary test directory and binary file helpers for isolated persistence tests
 - GoogleTest bootstrap script for vendoring into `external/googletest`
 
 ### Changed
+- Rewrote README as a polished recruiter-facing project overview
+- Updated DESIGN.md to document the current storage model, WAL format,
+  snapshot format, recovery flow, and tradeoffs
+- Normalized DEVLOG.md formatting into concise engineering milestone entries
 - Updated README benchmark instructions to point to the dedicated benchmark report
 - Ignored the generated benchmark executable as a build artifact
 - Replaced the old assert-based test executable with organized GoogleTest files
@@ -24,7 +35,8 @@ All notable changes to this project will be documented in this file.
 - Ignored vendored GoogleTest sources under `external/googletest`
 
 ### Fixed
-- Bounded snapshot key/value lengths during load so corrupted snapshots cannot request unbounded allocations
+- Bounded snapshot key/value lengths during load so corrupted snapshots cannot
+  request unbounded allocations
 
 ## [0.2.0] - 2026-04-21
 ### Added
@@ -44,6 +56,6 @@ All notable changes to this project will be documented in this file.
 
 ## [0.1.0] - 2026-04-18
 ### Added
-- In-memory key-value store (put/get/delete)
+- In-memory key-value store with `SET`, `GET`, and `DELETE`
 - CLI interface for interacting with store
 - Initial separation of parser, server, and storage layers

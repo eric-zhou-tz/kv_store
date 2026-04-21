@@ -1,127 +1,127 @@
 # KV Store
 
-A clean C++ foundation for a single-threaded key-value store with simple
-write-ahead log persistence.
+## One-Sentence Description
 
-This repository is intentionally small, but it is structured to evolve into a
-production-quality system with snapshotting, networking, and concurrency in
-later phases.
+High-performance C++ key-value store with in-memory reads, append-only WAL
+persistence, snapshotting, and crash recovery.
 
-## Goals
+## Key Highlights
 
-- Keep the Phase 1 implementation simple and readable.
-- Maintain clean boundaries between parsing, storage, and interface layers.
-- Make future extensions possible without rewriting the core store logic.
-- Keep dependencies explicit and easy to bootstrap.
+- Single-threaded C++17 key-value engine backed by `std::unordered_map`
+- Durable write path using an append-only binary write-ahead log
+- Snapshot checkpoints that record the covered WAL byte offset
+- Crash recovery through snapshot load plus WAL tail replay
+- GoogleTest coverage for core storage, WAL replay, snapshots, and recovery
+- Benchmark harness for throughput, latency, recovery, and snapshot timing
+
+## Demo
+
+Demo GIF placeholder: add a terminal demo showing `SET`/`GET`/`DELETE`, process
+restart, and recovery from snapshot plus WAL replay.
 
 ## Features
 
-- In-memory `KVStore` backed by `std::unordered_map`
-- Write-ahead log persistence in `kv_store.wal`
-- Snapshot support in `kv_store.snapshot`
-- Startup snapshot load plus WAL replay so data survives process restarts
-- Basic CLI with `SET`, `GET`, `DEL`, `HELP`, and `EXIT`
-- `DELETE` is accepted as an alias for `DEL`
-- Small parser module isolated from storage logic
-- Simple Makefile-based build
-- Docker-friendly project layout
-- GoogleTest-based persistence tests
+- CLI commands: `SET`, `GET`, `DEL`/`DELETE`, `CLEAR PERSISTENCE`, `HELP`,
+  and `EXIT`
+- In-memory storage engine for steady-state reads and writes
+- Append-only WAL for durable `SET` and `DELETE` operations
+- Binary, length-prefixed persistence records with bounded replay parsing
+- Full-state snapshots saved automatically every 1,000 writes or explicitly via
+  `KVStore::SaveSnapshot()`
+- Startup recovery that loads a snapshot first, then replays WAL records after
+  the snapshot's recorded byte offset
+- GoogleTest unit, integration, and stress tests
+- Single-threaded benchmark suite for persisted write, read, mixed, recovery,
+  and snapshot workloads
 
-## Persistence
+## Persistence Model
 
-Mutating commands are persisted to `kv_store.wal` before they are applied to memory.
-The WAL uses a compact binary record format instead of command text:
+The store keeps the active dataset in memory and uses disk only for durability
+and recovery.
 
-```text
-[record_length][op][key_size][key][value_size][value]  // SET
-[record_length][op][key_size][key]                     // DELETE
-```
+1. Mutating commands append a WAL record and flush it before updating memory.
+2. `SET` records store an opcode, key length, key bytes, value length, and
+   value bytes.
+3. `DELETE` records store an opcode, key length, and key bytes. Delete attempts
+   are logged even when the key is absent so replay preserves command order.
+4. Snapshots write the full in-memory map to a temporary file, then replace the
+   committed snapshot file. Each snapshot stores the WAL byte offset it covers.
+5. Startup recovery loads `kv_store.snapshot` when present, then replays
+   `kv_store.wal` from the saved offset. If no snapshot exists, recovery falls
+   back to WAL replay from offset zero.
 
-On startup, the program loads `kv_store.snapshot` when present, then replays
-`kv_store.wal` from the snapshot's covered byte offset before accepting
-commands. Malformed bounded WAL records are skipped during replay, and an
-incomplete trailing record stops recovery after the last valid operation.
+Replay skips malformed bounded records, stops safely at an incomplete trailing
+record, and avoids unbounded allocations for corrupted lengths.
 
-Example startup output:
+## Benchmarks
 
-```text
-Replaying WAL...
-Recovered 3 operation(s)
-kv-store>
-```
-
-The WAL is intentionally simple:
-
-- `SET <key> <value>` appends a binary set record, flushes it, then updates
-  memory.
-- `DEL <key>` or `DELETE <key>` appends a delete record, flushes it, then
-  removes the key from memory.
-- `GET <key>` reads from memory. The WAL is only used for recovery.
-
-## Directory Layout
-
-```text
-.
-├── bench
-│   ├── benchmark.cpp
-│   ├── benchmark_utils.cpp
-│   ├── benchmark_utils.h
-│   ├── workloads.cpp
-│   └── workloads.h
-├── Dockerfile
-├── DESIGN.md
-├── Makefile
-├── README.md
-├── benchmark.md
-├── include
-│   ├── common
-│   │   └── string_utils.h
-│   ├── parser
-│   │   └── command_parser.h
-│   ├── persistence
-│   │   └── wal.h
-│   ├── server
-│   │   └── cli_server.h
-│   └── store
-│       └── kv_store.h
-├── scripts
-│   ├── bootstrap_gtest.sh
-│   ├── build.sh
-│   └── run.sh
-├── src
-│   ├── common
-│   │   └── string_utils.cpp
-│   ├── main.cpp
-│   ├── parser
-│   │   └── command_parser.cpp
-│   ├── persistence
-│   │   ├── snapshot.cpp
-│   │   └── wal.cpp
-│   ├── server
-│   │   └── cli_server.cpp
-│   └── store
-│       └── kv_store.cpp
-└── tests
-    ├── helpers
-    ├── integration
-    ├── stress
-    ├── test_main.cpp
-    └── unit
-```
-
-## Build
+The repository includes a benchmark executable under `bench/`. It measures the
+current persisted code path: `KVStore` with WAL and snapshot persistence.
 
 ```bash
+make benchmark
+./benchmark
+./benchmark 100000
+```
+
+The checked-in baseline report is in [benchmark.md](benchmark.md). Treat those
+numbers as a local baseline, not portable performance claims; rerun the suite on
+the target machine before publishing new results.
+
+| Workload | Operations | Throughput | Notes |
+| --- | ---: | ---: | --- |
+| Write | 20,000 | 223,395.57 ops/sec | Persisted `SET` path with WAL flushes |
+| Read | 20,000 | 4,470,689.38 ops/sec | In-memory successful `GET` after preload |
+| Mixed | 20,000 | 902,398.15 ops/sec | Deterministic 70/30 read/write workload |
+| Recovery | 20,000 base + 999 tail | 8.38 ms | Snapshot load plus WAL tail replay |
+| Snapshot | 20,000 records | 4.21 ms | Explicit full-state snapshot |
+
+Benchmark conditions to record for future runs:
+
+| Field | Value |
+| --- | --- |
+| Machine / CPU / memory | TBD |
+| Operating system | TBD |
+| Compiler | TBD |
+| Build mode and flags | TBD |
+| Storage medium | TBD |
+| Git commit | TBD |
+
+## Testing
+
+Tests are organized by behavior rather than implementation detail:
+
+- Core store tests for `SET`, `GET`, `DELETE`, overwrites, missing keys, and
+  large values
+- WAL tests for replay order, malformed records, partial trailing records, and
+  replay from offsets
+- Snapshot tests for save/load, legacy snapshot loading, corruption handling,
+  and bounded field sizes
+- Recovery integration tests for WAL-only recovery, snapshot-only recovery,
+  snapshot plus WAL tail recovery, and persistence reset behavior
+- Stress tests for deterministic mixed workloads, hot-key overwrites, many
+  distinct keys, large values, and large snapshot-plus-WAL recovery
+
+GoogleTest is required for the test targets. The Makefile can use a vendored
+copy, a system install, or `GTEST_ROOT`.
+
+```bash
+./scripts/bootstrap_gtest.sh
+make test
+make test_verbose
+make test_stress
+```
+
+## Quick Start
+
+```bash
+git clone <repo-url>
+cd KV_Store
 make
-```
-
-## Run
-
-```bash
 ./bin/kv_store
 ```
 
-Example session:
+Example CLI session:
 
 ```text
 kv-store> SET language cpp
@@ -134,72 +134,59 @@ kv-store> EXIT
 Bye
 ```
 
-## Test
-
-Tests use GoogleTest. The Makefile first looks for `external/googletest` or
-`vendor/googletest`, then falls back to common system installs. To bootstrap a
-local copy:
+Useful targets:
 
 ```bash
-./scripts/bootstrap_gtest.sh
-```
-
-Run the normal unit and integration suite:
-
-```bash
+make run
 make test
-```
-
-Run with GoogleTest timing output:
-
-```bash
-make test_verbose
-```
-
-Run the bounded stress suite:
-
-```bash
 make test_stress
-```
-
-## Benchmarks
-
-This benchmark suite establishes the baseline performance of the current
-persisted KV store implementation. It measures steady-state read/write
-throughput, latency percentiles, mixed workload behavior, recovery time, and
-snapshot creation cost. These results provide the comparison point for later
-Phase 3 storage-engine and performance optimization work.
-
-Build and run the benchmark executable:
-
-```bash
 make benchmark
-./benchmark
+make run_benchmark
+make clean
 ```
 
-You can pass a smaller or larger operation count when collecting local results:
-
-```bash
-./benchmark 100000
-```
-
-Do not treat the README as a source of benchmark numbers. Capture fresh output
-from the current machine and build when documenting results.
-
-See [benchmark.md](benchmark.md) for the baseline benchmark methodology,
-results, and comparison guidance.
-
-## Docker
+Docker is also supported:
 
 ```bash
 docker build -t kv-store .
 docker run --rm -it kv-store
 ```
 
-## Next Phases
+## Project Structure
 
-- Add a storage engine abstraction for persistent backends
-- Add snapshotting and WAL compaction
-- Add TCP request handling
-- Add worker/threading model around the server layer
-- Add richer test coverage and benchmarking
+```text
+src/store/          Core in-memory KV store and persistence integration
+src/persistence/    WAL, snapshot, and binary I/O implementations
+src/parser/         CLI command parser
+src/server/         Interactive CLI loop and command dispatch
+include/            Public headers for store, persistence, parser, and server
+tests/              GoogleTest unit, integration, stress, and helper code
+bench/              Single-threaded benchmark harness and workloads
+scripts/            Build, run, and GoogleTest bootstrap helpers
+benchmark.md        Captured baseline methodology and results
+DESIGN.md           Engineer-facing storage and recovery design notes
+```
+
+## Design Decisions
+
+- Use `std::unordered_map` for average O(1) in-memory lookups and updates.
+- Keep the core single-threaded while persistence semantics are being hardened.
+- Append WAL records before memory mutation so successful writes have durable
+  replay records.
+- Use length-prefixed binary records for compact WAL and snapshot formats.
+- Bound record and field sizes during replay to keep corrupted files from
+  causing unbounded allocations.
+- Store the covered WAL offset in each snapshot so recovery can replay only the
+  post-snapshot tail.
+- Save snapshots with a temp-file-plus-rename flow so a failed snapshot write
+  does not replace the last complete snapshot.
+
+## Roadmap
+
+- [x] Phase 1: In-memory single-threaded store
+- [x] Phase 2: WAL persistence, crash recovery, and snapshots
+- [ ] Phase 3: Benchmarking polish, storage-engine evolution, compaction,
+      SSTables, and LSM direction
+- [ ] Phase 4: Concurrency and safe multi-threaded request handling
+- [ ] Phase 5: Networking and request protocol
+- [ ] Phase 6: Replication and distributed extensions
