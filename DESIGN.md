@@ -1,75 +1,131 @@
 # Design Notes
 
-## Overview
+This project is a single-node C++ key-value store focused on a clean,
+durable baseline before adding concurrency, networking, or a larger storage
+engine. The current implementation keeps the active data structure in memory
+and uses disk for write-ahead logging, snapshots, and crash recovery.
 
-Phase 1 is a small in-memory key-value store with a command-line interface.
-The implementation is intentionally simple, but the directory layout and module
-boundaries are chosen to support later systems work.
+## Storage Model
+
+`KVStore` owns the authoritative in-memory map:
+
+```cpp
+std::unordered_map<std::string, std::string>
+```
+
+Reads are served directly from memory. Writes are persisted first, then applied
+to the map. This keeps the steady-state API simple while making recovery
+possible after process restarts.
+
+The store can run without persistence for unit tests and in-memory use, or with
+configured `WriteAheadLog` and `Snapshot` objects for durable operation.
 
 ## Module Boundaries
 
-### `store`
+- `store`: Owns key/value state, write path ordering, snapshot triggers, and
+  recovery application.
+- `persistence`: Owns binary WAL and snapshot formats, bounded parsing, file
+  replacement, and replay.
+- `parser`: Converts CLI text into typed commands.
+- `server`: Owns the interactive loop and command dispatch.
+- `common`: Holds small shared string utilities.
 
-- Owns key/value data and core mutation/query operations
-- Contains no parsing or I/O logic
-- Can later become the home for persistence-aware storage engines
+The parser and server do not know the persistence format. Recovery applies
+directly to the store's backing map so replay does not append recovered
+operations back into the WAL.
 
-### `parser`
+## Write-Ahead Log
 
-- Translates raw command text into typed commands
-- Keeps syntax validation outside the store
-- Can later support richer protocols without changing storage code
+The WAL is append-only and stores binary framed records. Each record starts
+with a 32-bit payload length followed by an opcode-specific payload.
 
-### `server`
+```text
+SET:
+[record_length][op=1][key_size][key][value_size][value]
 
-- Owns the interactive loop and command dispatch
-- Depends on parser and store, but not vice versa
-- Can later be replaced or extended by TCP/HTTP request handlers
+DELETE:
+[record_length][op=2][key_size][key]
+```
 
-### `common`
+Write ordering:
 
-- Holds small, dependency-free helpers shared across modules
-- Keeps low-level utility code out of business logic
+1. Append the WAL record.
+2. Flush the WAL stream.
+3. Apply the mutation to the in-memory map.
+4. Trigger an automatic snapshot if the write interval has been reached.
 
-## Why This Structure Scales
+`DELETE` operations are logged even when the key does not exist. This keeps the
+log as an ordered command history and makes replay idempotent.
 
-- The store API stays stable while interface layers evolve.
-- New frontends can reuse the same store and parser components.
-- Persistence can be added behind the store boundary without pushing file I/O
-  concerns into the CLI or parser.
-- Concurrency can be introduced around request handling and storage access later,
-  after Phase 1 semantics are correct.
+Replay validates each bounded frame before applying it. Malformed records are
+skipped when they are fully framed, while incomplete trailing records stop
+replay at the last valid operation. Impossible record lengths stop replay
+without allocating the payload.
 
-## Phase 1 Scope
+## Snapshots
 
-Included:
+Snapshots materialize the full in-memory map. They are separate from the WAL:
+the snapshot stores state, while the WAL stores ordered mutations after that
+state.
 
-- `SET key value`
-- `GET key`
-- `DEL key`
-- `HELP`
-- `EXIT`
+Snapshot file layout:
 
-Not included:
+```text
+[magic="KVS1"][version][wal_offset][entry_count]
+[key_size][key][value_size][value]
+...
+```
 
-- Networking
-- Persistence
-- Transactions
-- Replication
-- Concurrency control
+The snapshot writer saves to a temporary file and then renames it over the
+committed snapshot. This prevents a failed snapshot write from replacing the
+last complete snapshot.
 
-## Extension Path
+Snapshots are created in two ways:
 
-1. Persistence
-   - Add a write-ahead log module
-   - Add snapshot/load support
-   - Preserve the `KVStore` interface while changing internals
+- Automatically after every 1,000 write commands.
+- Explicitly through `KVStore::SaveSnapshot()`.
 
-2. Networking
-   - Add a socket server beside the CLI server
-   - Reuse the same command dispatch flow
+Each snapshot records the current WAL byte offset. That offset marks the point
+through the log already represented by the snapshot.
 
-3. Concurrency
-   - Introduce synchronization at the store boundary
-   - Add a worker model in the server layer
-   - Preserve parsing and command execution semantics
+## Recovery Flow
+
+Startup recovery follows the same sequence as the application entry point:
+
+1. Open the WAL and snapshot handles.
+2. Load `kv_store.snapshot` if it exists.
+3. Use the snapshot's recorded WAL offset when available.
+4. Replay `kv_store.wal` from that offset into the in-memory map.
+5. Start serving CLI commands.
+
+If no snapshot exists, recovery replays the WAL from offset zero. If a snapshot
+exists but the WAL has newer operations, those operations override or delete
+snapshot values during tail replay.
+
+## Tradeoffs
+
+- Simplicity vs performance: The store uses one in-memory hash map and a direct
+  append-only WAL. This keeps correctness easy to reason about, but every write
+  pays for a WAL flush.
+- Replay cost vs snapshot frequency: More frequent snapshots reduce WAL replay
+  time but add periodic full-map snapshot cost to the write path.
+- Binary compactness vs portability: Current binary formats use fixed-width
+  fields and host byte order. A future portable format should define explicit
+  endianness.
+- Single-threaded baseline vs concurrency: The current design avoids locks and
+  request interleavings so persistence ordering is clear. Concurrency should be
+  added around this contract, not before it is stable.
+- Full snapshots vs incremental checkpoints: Full snapshots are simple and
+  robust for this phase. Larger datasets may need segmented WAL files,
+  incremental checkpointing, or compaction.
+
+## Current Limits
+
+- Single process and single-threaded request handling
+- No transactions or multi-key atomic operations
+- No WAL checksums yet
+- No WAL segmentation or garbage collection after snapshot coverage
+- No networking or replication layer
+
+These limits are intentional for the current phase. They define the boundary
+for Phase 3 storage-engine work and later concurrency/networking phases.
