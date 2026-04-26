@@ -26,11 +26,13 @@ configured `WriteAheadLog` and `Snapshot` objects for durable operation.
   recovery application.
 - `persistence`: Owns binary WAL and snapshot formats, bounded parsing, file
   replacement, and replay.
-- `parser`: Converts CLI text into typed commands.
-- `server`: Owns the interactive loop and command dispatch.
+- `parser`: Parses raw JSON requests and validates only the shared request
+  shape.
+- `command`: Interprets validated actions, maps them to KV keys and values,
+  and calls the generic store.
 - `common`: Holds small shared string utilities.
 
-The parser and server do not know the persistence format. Recovery applies
+The parser and command layer do not know the persistence format. Recovery applies
 directly to the store's backing map so replay does not append recovered
 operations back into the WAL.
 
@@ -96,7 +98,10 @@ Startup recovery follows the same sequence as the application entry point:
 2. Load `kv_store.snapshot` if it exists.
 3. Use the snapshot's recorded WAL offset when available.
 4. Replay `kv_store.wal` from that offset into the in-memory map.
-5. Start serving CLI commands.
+5. Hand validated JSON commands to the command layer for execution.
+
+In the current application entry point, those files are stored under `data/`
+by default, or under the directory supplied with `--db`.
 
 If no snapshot exists, recovery replays the WAL from offset zero. If a snapshot
 exists but the WAL has newer operations, those operations override or delete

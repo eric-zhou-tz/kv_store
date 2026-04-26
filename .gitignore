@@ -75,6 +75,8 @@ external/googletest/
 tmp/
 temp/
 *.tmp
+data/*
+!data/.gitkeep
 
 # =========================
 

@@ -3,23 +3,30 @@ PKG_CONFIG ?= pkg-config
 
 CXXFLAGS ?= -std=c++17 -Wall -Wextra -Wpedantic
 CPPFLAGS ?= -Iinclude
+JSON_CPPFLAGS :=
 DEPFLAGS := -MMD -MP
 LDFLAGS ?=
 LDLIBS ?=
+RUN_ARGS ?=
 
 APP_TARGET := bin/kv_store
 TEST_TARGET := bin/kv_store_tests
 STRESS_TARGET := bin/kv_store_stress_tests
+LIVE_DATA_TARGET := bin/kv_store_live_data_tests
 BENCHMARK_TARGET := benchmark
 
 APP_SRCS := \
 	src/main.cpp \
 	src/common/string_utils.cpp \
 	src/parser/command_parser.cpp \
-	src/server/cli_server.cpp \
+	src/command/command.cpp \
 	src/store/kv_store.cpp \
 	src/persistence/snapshot.cpp \
 	src/persistence/wal.cpp
+
+COMMAND_LAYER_SRCS := \
+	src/parser/command_parser.cpp \
+	src/command/command.cpp
 
 PERSISTENCE_SRCS := \
 	src/store/kv_store.cpp \
@@ -32,15 +39,20 @@ TEST_HELPER_SRCS := \
 
 TEST_SRCS := \
 	tests/test_main.cpp \
+	tests/integration/test_agent_overlay_persistence.cpp \
+	tests/unit/test_command.cpp \
+	tests/unit/test_command_parser.cpp \
 	tests/unit/test_kv_store.cpp \
 	tests/unit/test_wal.cpp \
 	tests/unit/test_snapshot.cpp \
 	tests/integration/test_recovery.cpp \
 	$(TEST_HELPER_SRCS) \
+	$(COMMAND_LAYER_SRCS) \
 	$(PERSISTENCE_SRCS)
 
 STRESS_SRCS := \
 	tests/test_main.cpp \
+	tests/stress/test_agent_overlay_stress.cpp \
 	tests/stress/test_stress.cpp \
 	$(TEST_HELPER_SRCS) \
 	$(PERSISTENCE_SRCS)
@@ -50,6 +62,10 @@ BENCHMARK_SRCS := \
 	bench/benchmark_utils.cpp \
 	bench/workloads.cpp \
 	$(PERSISTENCE_SRCS)
+
+LIVE_DATA_SRCS := \
+	tests/test_main.cpp \
+	tests/stress/test_agent_overlay_live_data.cpp
 
 GTEST_ROOT ?=
 GTEST_VENDOR_DIR := $(firstword $(wildcard external/googletest vendor/googletest))
@@ -89,18 +105,30 @@ else
 GTEST_AVAILABLE := 0
 endif
 
+ifneq ($(wildcard /opt/homebrew/include/nlohmann/json.hpp),)
+JSON_CPPFLAGS := -I/opt/homebrew/include
+else ifneq ($(wildcard /usr/local/include/nlohmann/json.hpp),)
+JSON_CPPFLAGS := -I/usr/local/include
+else ifneq ($(wildcard /opt/miniconda3/include/nlohmann/json.hpp),)
+JSON_CPPFLAGS := -I/opt/miniconda3/include
+endif
+
+CPPFLAGS += $(JSON_CPPFLAGS)
+
 APP_OBJS := $(patsubst %.cpp,build/app/%.o,$(APP_SRCS))
 TEST_OBJS := $(patsubst %.cpp,build/test/%.o,$(TEST_SRCS))
 STRESS_OBJS := $(patsubst %.cpp,build/stress/%.o,$(STRESS_SRCS))
 BENCHMARK_OBJS := $(patsubst %.cpp,build/bench/%.o,$(BENCHMARK_SRCS))
+LIVE_DATA_OBJS := $(patsubst %.cpp,build/live_data/%.o,$(LIVE_DATA_SRCS))
 
 APP_DEPS := $(APP_OBJS:.o=.d)
 TEST_DEPS := $(TEST_OBJS:.o=.d)
 STRESS_DEPS := $(STRESS_OBJS:.o=.d)
 BENCHMARK_DEPS := $(BENCHMARK_OBJS:.o=.d)
+LIVE_DATA_DEPS := $(LIVE_DATA_OBJS:.o=.d)
 GTEST_DEPS := $(GTEST_OBJS:.o=.d)
 
-.PHONY: all clean run test test_verbose test_stress run_benchmark check_gtest
+.PHONY: all clean run test test_verbose test_stress test_live_data run_benchmark check_gtest
 
 all: $(APP_TARGET)
 
@@ -108,13 +136,17 @@ $(APP_TARGET): $(APP_OBJS)
 	mkdir -p $(dir $@)
 	$(CXX) $(LDFLAGS) $(APP_OBJS) -o $@ $(LDLIBS)
 
-$(TEST_TARGET): check_gtest $(TEST_OBJS) $(GTEST_OBJS)
+$(TEST_TARGET): $(APP_TARGET) check_gtest $(TEST_OBJS) $(GTEST_OBJS)
 	mkdir -p $(dir $@)
 	$(CXX) $(LDFLAGS) $(GTEST_LDFLAGS) $(TEST_OBJS) $(GTEST_OBJS) -o $@ $(LDLIBS) $(GTEST_LDLIBS)
 
-$(STRESS_TARGET): check_gtest $(STRESS_OBJS) $(GTEST_OBJS)
+$(STRESS_TARGET): $(APP_TARGET) check_gtest $(STRESS_OBJS) $(GTEST_OBJS)
 	mkdir -p $(dir $@)
 	$(CXX) $(LDFLAGS) $(GTEST_LDFLAGS) $(STRESS_OBJS) $(GTEST_OBJS) -o $@ $(LDLIBS) $(GTEST_LDLIBS)
+
+$(LIVE_DATA_TARGET): $(APP_TARGET) check_gtest $(LIVE_DATA_OBJS) $(GTEST_OBJS)
+	mkdir -p $(dir $@)
+	$(CXX) $(LDFLAGS) $(GTEST_LDFLAGS) $(LIVE_DATA_OBJS) $(GTEST_OBJS) -o $@ $(LDLIBS) $(GTEST_LDLIBS)
 
 $(BENCHMARK_TARGET): $(BENCHMARK_OBJS)
 	$(CXX) $(LDFLAGS) $(BENCHMARK_OBJS) -o $@ $(LDLIBS)
@@ -137,6 +169,10 @@ build/bench/%.o: %.cpp
 	mkdir -p $(dir $@)
 	$(CXX) $(CPPFLAGS) -Ibench $(CXXFLAGS) $(DEPFLAGS) -c $< -o $@
 
+build/live_data/%.o: %.cpp
+	mkdir -p $(dir $@)
+	$(CXX) $(CPPFLAGS) -Itests $(GTEST_CPPFLAGS) $(CXXFLAGS) $(DEPFLAGS) -c $< -o $@
+
 build/gtest/gtest-all.o: $(GTEST_VENDOR_DIR)/googletest/src/gtest-all.cc
 	mkdir -p $(dir $@)
 	$(CXX) $(GTEST_CPPFLAGS) $(CXXFLAGS) $(DEPFLAGS) -c $< -o $@
@@ -157,11 +193,14 @@ test_verbose: $(TEST_TARGET)
 test_stress: $(STRESS_TARGET)
 	./$(STRESS_TARGET) --gtest_color=yes
 
+test_live_data: $(LIVE_DATA_TARGET)
+	./$(LIVE_DATA_TARGET) --gtest_color=yes
+
 run_benchmark: $(BENCHMARK_TARGET)
 	./$(BENCHMARK_TARGET)
 
 run: $(APP_TARGET)
-	./$(APP_TARGET)
+	./$(APP_TARGET) $(RUN_ARGS)
 
 clean:
 	rm -rf build bin $(BENCHMARK_TARGET)
@@ -170,4 +209,5 @@ clean:
 -include $(TEST_DEPS)
 -include $(STRESS_DEPS)
 -include $(BENCHMARK_DEPS)
+-include $(LIVE_DATA_DEPS)
 -include $(GTEST_DEPS)

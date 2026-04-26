@@ -20,8 +20,10 @@ persistence, snapshotting, and crash recovery.
 
 ## Features
 
-- CLI commands: `SET`, `GET`, `DEL`/`DELETE`, `CLEAR PERSISTENCE`, `HELP`,
-  and `EXIT`
+- JSON-driven agent command pipeline: parse raw request, validate shape,
+  dispatch action, and execute against the generic KV store
+- Supported command actions: `put`, `get`, `delete`, `log_step`,
+  `save_memory`, `get_memory`, `save_run_state`, and `get_run_state`
 - In-memory storage engine for steady-state reads and writes
 - Append-only WAL for durable `SET` and `DELETE` operations
 - Binary, length-prefixed persistence records with bounded replay parsing
@@ -47,7 +49,8 @@ and recovery.
    committed snapshot file. Each snapshot stores the WAL byte offset it covers.
 5. Startup recovery loads `kv_store.snapshot` when present, then replays
    `kv_store.wal` from the saved offset. If no snapshot exists, recovery falls
-   back to WAL replay from offset zero.
+   back to WAL replay from offset zero. By default these files live under
+   `data/`, or under the directory passed with `--db`.
 
 Replay skips malformed bounded records, stops safely at an incomplete trailing
 record, and avoids unbounded allocations for corrupted lengths.
@@ -119,21 +122,22 @@ make test_stress
 git clone <repo-url>
 cd KV_Store
 make
-./bin/kv_store
+echo '{"action":"put","params":{"key":"x","value":"y"}}' | ./bin/kv_store
+echo '{"action":"get","params":{"key":"x"}}' | ./bin/kv_store
 ```
 
-Example CLI session:
+Conceptual agent integration:
 
-```text
-kv-store> SET language cpp
-OK
-kv-store> GET language
-cpp
-kv-store> DELETE language
-1
-kv-store> EXIT
-Bye
+```cpp
+std::string raw = R"({"action":"put","params":{"key":"language","value":"cpp"}})";
+kv::parser::Json request = kv::parser::parse_agent_request(raw);
+kv::command::Json response = kv::command::execute_command(request, store);
+std::cout << response.dump() << std::endl;
 ```
+
+`main` now runs a single-request pipeline. When `--db` is omitted, persistence
+is stored in `data/kv_store.wal` and `data/kv_store.snapshot`. Passing
+`--db <path>` moves both files under that directory.
 
 Useful targets:
 
@@ -156,11 +160,11 @@ docker run --rm -it kv-store
 ## Project Structure
 
 ```text
+src/command/        Action-to-KV mapping for validated JSON requests
 src/store/          Core in-memory KV store and persistence integration
 src/persistence/    WAL, snapshot, and binary I/O implementations
-src/parser/         CLI command parser
-src/server/         Interactive CLI loop and command dispatch
-include/            Public headers for store, persistence, parser, and server
+src/parser/         JSON request parsing and shape validation
+include/            Public headers for command, store, persistence, and parser
 tests/              GoogleTest unit, integration, stress, and helper code
 bench/              Single-threaded benchmark harness and workloads
 scripts/            Build, run, and GoogleTest bootstrap helpers

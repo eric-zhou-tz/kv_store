@@ -3,56 +3,30 @@
 
 #include <string>
 
+#include <nlohmann/json.hpp>
+
 namespace kv {
 namespace parser {
 
 /**
- * @brief Enumerates the supported command kinds.
+ * @brief Shared JSON type for agent request parsing.
  */
-enum class CommandType {
-  kInvalid,
-  kSet,
-  kGet,
-  kDel,
-  kClearPersistence,
-  kHelp,
-  kExit,
-};
+using Json = nlohmann::json;
 
 /**
- * @brief Represents a parsed command and its arguments.
+ * @brief Parses and validates a raw agent JSON request.
+ *
+ * Required request shape:
+ * {
+ *   "action": "...",
+ *   "params": { ... }
+ * }
+ *
+ * @param raw Raw JSON request string.
+ * @return Validated JSON request object.
+ * @throws std::invalid_argument When the request is malformed or invalid.
  */
-struct Command {
-  /** @brief Parsed command kind. */
-  CommandType type = CommandType::kInvalid;
-  /** @brief Key argument for commands that target a key. */
-  std::string key;
-  /** @brief Value argument for commands that store data. */
-  std::string value;
-  /** @brief Parser error message for invalid commands. */
-  std::string error_message;
-
-  /**
-   * @brief Checks whether the command parsed successfully.
-   *
-   * @return `true` when the command type is not `kInvalid`.
-   */
-  bool IsValid() const;
-};
-
-/**
- * @brief Parses raw CLI input into structured commands.
- */
-class CommandParser {
- public:
-  /**
-   * @brief Parses a single line of user input.
-   *
-   * @param input Raw command line entered by the user.
-   * @return Parsed command description or an invalid command with an error.
-   */
-  Command Parse(const std::string& input) const;
-};
+Json parse_agent_request(const std::string& raw);
 
 }  // namespace parser
 }  // namespace kv
